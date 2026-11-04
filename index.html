@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Solitaire</title>
+<style>
+  :root{
+    --felt-light:#2f9a45;
+    --felt-dark:#0b6524;
+    --red:#c8102e;
+    --black:#111;
+    --gold:#ffd400;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;
+    font-family:"Lucida Grande","Helvetica Neue",Helvetica,Arial,sans-serif;}
+  body{background:radial-gradient(ellipse at 50% 35%, var(--felt-light) 0%, #1c7f35 55%, var(--felt-dark) 100%);
+    display:flex;flex-direction:column;-webkit-user-select:none;user-select:none;}
+
+  /* ---------- Top bar (early OS X pinstripe look) ---------- */
+  #bar{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+    padding:10px 16px;
+    background:repeating-linear-gradient(0deg,#ececec 0 2px,#f7f7f7 2px 4px);
+    border-bottom:1px solid #8a8a8a;box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:10}
+  .btn{font:inherit;font-size:21px;font-weight:600;color:#10233f;cursor:pointer;
+    padding:9px 24px;border-radius:999px;border:1px solid #5a7bb0;
+    background:linear-gradient(#ffffff 0%,#d7e6fb 48%,#a9c7f2 52%,#cfe1fb 100%);
+    box-shadow:0 1px 2px rgba(0,0,0,.3), inset 0 1px 0 #fff;}
+  .btn:active{background:linear-gradient(#cfe0fa,#8db3ea 50%,#77a3e3 52%,#a9c7f2)}
+  .btn:disabled{opacity:.45;cursor:default}
+  #status{margin-left:auto;font-size:21px;color:#222;white-space:nowrap}
+  #status b{color:#0b5a20}
+
+  /* ---------- Table ---------- */
+  #table{position:relative;z-index:0;flex:1 1 auto;touch-action:none;overflow:hidden}
+  .slot{position:absolute;width:var(--cw);height:var(--ch);
+    border:3px solid rgba(255,255,255,.35);border-radius:calc(var(--cw)*.08);
+    display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,.45);font-size:calc(var(--cw)*.42);font-weight:700}
+  #slot-stock{cursor:pointer}
+  .slot.hint{box-shadow:0 0 0 6px var(--gold)}
+
+  .card{position:absolute;width:var(--cw);height:var(--ch);border-radius:calc(var(--cw)*.08);
+    transition:left .22s ease, top .22s ease;cursor:pointer}
+  #table.noanim .card{transition:none}
+  .card.drag{transition:none;filter:drop-shadow(0 8px 10px rgba(0,0,0,.45))}
+  .face,.back{position:absolute;inset:0;border-radius:inherit}
+  .face{display:none;background:#fff;border:1px solid #8c8c8c;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+  .card.up .face{display:block}
+  .card.up .back{display:none}
+  .back{background:#fff;border:1px solid #555;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+  .back::after{content:"";position:absolute;inset:7%;border-radius:calc(var(--cw)*.05);
+    background:
+      repeating-linear-gradient(45deg,rgba(255,255,255,.18) 0 3px,transparent 3px 9px),
+      repeating-linear-gradient(-45deg,rgba(255,255,255,.18) 0 3px,transparent 3px 9px),
+      #2554b8;}
+  .red{color:var(--red)} .black{color:var(--black)}
+  .corner{position:absolute;left:6%;top:2%;display:flex;align-items:baseline;gap:3%;
+    font-weight:700;line-height:1.05;font-size:calc(var(--cw)*.29);letter-spacing:-.02em}
+  .corner .st{font-size:calc(var(--cw)*.25)}
+  .corner.br{left:auto;top:auto;right:6%;bottom:2%;transform:rotate(180deg);font-size:calc(var(--cw)*.17)}
+  .corner.br .st{font-size:calc(var(--cw)*.15)}
+  .pip{position:absolute;left:0;right:0;top:30%;bottom:10%;display:flex;align-items:center;justify-content:center;
+    font-size:calc(var(--cw)*.6);line-height:1}
+  .court{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:calc(var(--cw)*.42);
+    border:2px solid currentColor;border-radius:8%;width:58%;height:78%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+  .court small{font-size:calc(var(--cw)*.26)}
+  .card.hint{box-shadow:0 0 0 calc(var(--cw)*.05) var(--gold)}
+  .card.shake{animation:shake .35s}
+  @keyframes shake{0%,100%{transform:none}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}
+    60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+  /* ---------- Overlays ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,30,10,.55);display:none;
+    align-items:center;justify-content:center;z-index:100;padding:16px}
+  .overlay.show{display:flex}
+  .panel{background:repeating-linear-gradient(0deg,#efefef 0 2px,#fafafa 2px 4px);
+    border:1px solid #777;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5);
+    padding:28px 32px;max-width:640px;width:100%;text-align:center;max-height:100%;overflow:auto}
+  .panel h1{margin:0 0 6px;font-size:40px;color:#0b5a20}
+  .panel p{margin:0 0 20px;font-size:22px;color:#333}
+  .levels{display:flex;flex-direction:column;gap:14px}
+  .levels .btn{font-size:26px;padding:14px 20px;border-radius:18px;text-align:left;display:block;width:100%}
+  .levels .btn span{display:block;font-size:18px;font-weight:400;color:#2b3a52;margin-top:4px}
+  .levels .btn.last{outline:4px solid var(--gold);outline-offset:2px}
+  .tip{margin-top:18px !important;font-size:19px !important;color:#555 !important}
+  .row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;
+    background:rgba(0,0,0,.8);color:#fff;font-size:22px;padding:14px 24px;border-radius:12px;
+    opacity:0;transition:opacity .3s;pointer-events:none;text-align:center;max-width:90vw}
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <button class="btn" id="btn-new">New Game</button>
+  <button class="btn" id="btn-undo">Undo</button>
+  <button class="btn" id="btn-hint">Hint</button>
+  <div id="status"></div>
+</div>
+
+<div id="table">
+  <div class="slot" id="slot-stock"></div>
+  <div class="slot" id="slot-waste"></div>
+  <div class="slot" id="slot-f0">A</div>
+  <div class="slot" id="slot-f1">A</div>
+  <div class="slot" id="slot-f2">A</div>
+  <div class="slot" id="slot-f3">A</div>
+  <div class="slot" id="slot-t0"></div><div class="slot" id="slot-t1"></div><div class="slot" id="slot-t2"></div>
+  <div class="slot" id="slot-t3"></div><div class="slot" id="slot-t4"></div><div class="slot" id="slot-t5"></div>
+  <div class="slot" id="slot-t6"></div>
+</div>
+
+<div class="overlay" id="start">
+  <div class="panel">
+    <h1>Solitaire</h1>
+    <p>Select Your Difficulty Level</p>
+    <div class="levels">
+      <button class="btn" data-level="easy">Easy<span>Turn over 1 card at a time. Go through the deck as many times as you like.</span></button>
+      <button class="btn" data-level="medium">Medium<span>Turn over 3 cards at a time. Go through the deck as many times as you like.</span></button>
+      <button class="btn" data-level="hard">Hard<span>Turn over 3 cards at a time. Only 3 trips through the deck.</span></button>
+    </div>
+    <p class="tip">Tip: tap a card and it moves to the best spot by itself. You can also drag cards.</p>
+  </div>
+</div>
+
+<div class="overlay" id="win">
+  <div class="panel">
+    <h1>You won! 🎉</h1>
+    <p id="win-text"></p>
+    <div class="row">
+      <button class="btn" id="btn-again">Play Again</button>
+      <button class="btn" id="btn-change">Change Difficulty</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  const VS = '︎'; // force text (not emoji) suits
+  const SUITS = ['♠','♥','♣','♦'];
+  const RANKS = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const isRed = s => s === 1 || s === 3;
+  const LEVELS = {
+    easy:   {name:'Easy',   draw:1, passes:Infinity},
+    medium: {name:'Medium', draw:3, passes:Infinity},
+    hard:   {name:'Hard',   draw:3, passes:3}
+  };
+
+  const table = document.getElementById('table');
+  const $ = id => document.getElementById(id);
+  const els = {};
+  let level = 'easy', S = null, undoStack = [], busy = false, drag = null, L = {};
+
+  try { const l = localStorage.getItem('solitaire-level'); if (LEVELS[l]) level = l; } catch(e){}
+
+  // ---------- Card elements (created once) ----------
+  for (let id = 0; id < 52; id++){
+    const s = Math.floor(id / 13), r = id % 13 + 1;
+    const color = isRed(s) ? 'red' : 'black';
+    const suit = SUITS[s] + VS, rank = RANKS[r];
+    let center = `<div class="pip">${suit}</div>`;
+    if (r > 10) center = `<div class="pip"><div class="court">${rank}<small>${suit}</small></div></div>`;
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.dataset.id = id;
+    el.innerHTML =
+      `<div class="face ${color}">
+         <div class="corner"><span class="rk">${rank}</span><span class="st">${suit}</span></div>
+         ${center}
+         <div class="corner br"><span class="rk">${rank}</span><span class="st">${suit}</span></div>
+       </div><div class="back"></div>`;
+    table.appendChild(el);
+    els[id] = el;
+  }
+
+  // ---------- Game setup ----------
+  function newGame(lv){
+    level = lv;
+    try { localStorage.setItem('solitaire-level', lv); } catch(e){}
+    const deck = [];
+    for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) deck.push({id:s*13+r-1, s, r, up:false});
+    for (let i = deck.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [deck[i],deck[j]] = [deck[j],deck[i]]; }
+    S = {stock:[], waste:[], found:[[],[],[],[]], tab:[[],[],[],[],[],[],[]], passesUsed:0, moves:0};
+    for (let i = 0; i < 7; i++) for (let j = 0; j <= i; j++){ const c = deck.pop(); c.up = (j === i); S.tab[i].push(c); }
+    S.stock = deck;
+    undoStack = [];
+    busy = false;
+    $('start').classList.remove('show');
+    $('win').classList.remove('show');
+    render(true);
+  }
+
+  const cfg = () => LEVELS[level];
+  const canRecycle = () => S.passesUsed < cfg().passes - 1;
+  const won = () => S.found.every(f => f.length === 13);
+
+  function pile(loc){
+    if (loc.t === 'stock') return S.stock;
+    if (loc.t === 'waste') return S.waste;
+    if (loc.t === 'found') return S.found[loc.i];
+    return S.tab[loc.i];
+  }
+  function locate(id){
+    let k;
+    if ((k = S.stock.findIndex(c => c.id === id)) >= 0) return {t:'stock', k};
+    if ((k = S.waste.findIndex(c => c.id === id)) >= 0) return {t:'waste', k};
+    for (let i = 0; i < 4; i++) if ((k = S.found[i].findIndex(c => c.id === id)) >= 0) return {t:'found', i, k};
+    for (let i = 0; i < 7; i++) if ((k = S.tab[i].findIndex(c => c.id === id)) >= 0) return {t:'tab', i, k};
+    return null;
+  }
+
+  // ---------- Layout ----------
+  const colX = i => L.left + i * (L.W + L.gap);
+
+  function layout(){
+    const vw = table.clientWidth, vh = table.clientHeight;
+    const pad = Math.max(10, Math.min(vw, vh) * 0.02);
+    const W = Math.min((vw - 2*pad) / (7 + 6*0.14), (vh - 2*pad) / (1.4 * 3.7), 210);
+    const H = W * 1.4, gap = W * 0.14;
+    L = {W, H, gap, pad, left:(vw - (7*W + 6*gap)) / 2, top:pad, tabY:pad + H + gap*1.4, bottom:vh - pad};
+    table.style.setProperty('--cw', W + 'px');
+    table.style.setProperty('--ch', H + 'px');
+    const place = (id, x, y) => { const e = $(id); e.style.left = x + 'px'; e.style.top = y + 'px'; };
+    place('slot-stock', colX(0), L.top);
+    place('slot-waste', colX(1), L.top);
+    for (let f = 0; f < 4; f++) place('slot-f' + f, colX(3 + f), L.top);
+    for (let i = 0; i < 7; i++) place('slot-t' + i, colX(i), L.tabY);
+  }
+
+  function colOffsets(col){
+    let nd = 0; while (nd < col.length && !col[nd].up) nd++;
+    const nu = col.length - nd;
+    let dOff = L.H * 0.12, uOff = L.H * 0.3;
+    const avail = L.bottom - L.tabY - L.H;
+    const need = () => nd * dOff + Math.max(0, nu - 1) * uOff;
+    if (need() > avail){
+      if (nu > 1) uOff = Math.max(L.H * 0.17, (avail - nd * dOff) / (nu - 1));
+      if (need() > avail){ const f = avail / need(); dOff *= f; uOff *= f; }
+    }
+    return {dOff, uOff};
+  }
+
+  function computePositions(){
+    const pos = {};
+    S.stock.forEach((c, i) => pos[c.id] = {x:colX(0), y:L.top, z:10 + i});
+    const n = S.waste.length, fan = cfg().draw === 3 ? Math.min(3, n) : 1;
+    S.waste.forEach((c, i) => {
+      const k = i - (n - fan);
+      pos[c.id] = {x:colX(1) + (k > 0 ? k * L.W * 0.3 : 0), y:L.top, z:100 + i};
+    });
+    S.found.forEach((f, fi) => f.forEach((c, i) => pos[c.id] = {x:colX(3 + fi), y:L.top, z:200 + i}));
+    S.tab.forEach((col, ci) => {
+      const {dOff, uOff} = colOffsets(col);
+      let y = L.tabY;
+      col.forEach((c, i) => { pos[c.id] = {x:colX(ci), y, z:300 + i}; y += c.up ? uOff : dOff; });
+    });
+    return pos;
+  }
+
+  function render(instant){
+    layout();
+    if (instant) table.classList.add('noanim');
+    const pos = computePositions();
+    const all = [].concat(S.stock, S.waste, ...S.found, ...S.tab);
+    all.forEach(c => {
+      const el = els[c.id], p = pos[c.id];
+      const x = p.x + 'px', y = p.y + 'px';
+      const moved = el.style.left !== x || el.style.top !== y;
+      el.classList.toggle('up', c.up);
+      el.classList.remove('drag');
+      el.style.left = x; el.style.top = y;
+      if (moved && !instant){
+        el.style.zIndex = 1000 + p.z;
+        clearTimeout(el._zt);
+        el._zt = setTimeout(() => el.style.zIndex = p.z, 260);
+      } else el.style.zIndex = p.z;
+    });
+    // stock slot symbol
+    const st = $('slot-stock');
+    st.textContent = S.stock.length ? '' : (S.waste.length && canRecycle() ? '↻' : (S.waste.length ? '✕' : ''));
+    if (instant){ void table.offsetHeight; table.classList.remove('noanim'); }
+    updateBar();
+  }
+
+  function updateBar(){
+    let txt = `<b>${cfg().name}</b> &nbsp;·&nbsp; Moves: ${S.moves}`;
+    if (cfg().passes !== Infinity){
+      const left = cfg().passes - 1 - S.passesUsed;
+      txt += ` &nbsp;·&nbsp; Redeals left: ${left}`;
+    }
+    $('status').innerHTML = txt;
+    $('btn-undo').disabled = !undoStack.length;
+  }
+
+  // ---------- Rules ----------
+  function fitsFound(c, f){
+    const p = S.found[f];
+    if (!p.length) return c.r === 1;
+    const top = p[p.length - 1];
+    return top.s === c.s && c.r === top.r + 1;
+  }
+  function fitsTab(c, i){
+    const p = S.tab[i];
+    if (!p.length) return c.r === 13;
+    const top = p[p.length - 1];
+    return top.up && isRed(top.s) !== isRed(c.s) && c.r === top.r - 1;
+  }
+  function canDrop(loc, target){
+    const cards = pile(loc).slice(loc.k);
+    if (target.t === 'found'){
+      if (loc.t === 'found' && loc.i === target.i) return false;
+      return cards.length === 1 && fitsFound(cards[0], target.i);
+    }
+    if (loc.t === 'tab' && loc.i === target.i) return false;
+    return fitsTab(cards[0], target.i);
+  }
+  function movable(loc){
+    const p = pile(loc);
+    if (loc.t === 'waste' || loc.t === 'found') return loc.k === p.length - 1;
+    if (loc.t === 'tab') return p[loc.k].up;
+    return false;
+  }
+
+  // ---------- Actions ----------
+  function pushUndo(){
+    undoStack.push(JSON.stringify(S));
+    if (undoStack.length > 300) undoStack.shift();
+  }
+  function doMove(loc, target){
+    pushUndo();
+    const src = pile(loc);
+    const cards = src.splice(loc.k);
+    pile(target).push(...cards);
+    if (loc.t === 'tab' && src.length && !src[src.length - 1].up) src[src.length - 1].up = true;
+    S.moves++;
+    afterAction();
+  }
+  function afterAction(){
+    render();
+    if (won()) { busy = true; setTimeout(showWin, 450); return; }
+    maybeAutoFinish();
+  }
+
+  function clickStock(){
+    if (S.stock.length){
+      pushUndo();
+      const n = Math.min(cfg().draw, S.stock.length);
+      for (let i = 0; i < n; i++){ const c = S.stock.pop(); c.up = true; S.waste.push(c); }
+      S.moves++;
+      afterAction();
+    } else if (S.waste.length && canRecycle()){
+      pushUndo();
+      S.stock = S.waste.reverse();
+      S.stock.forEach(c => c.up = false);
+      S.waste = [];
+      S.passesUsed++;
+      S.moves++;
+      afterAction();
+    } else if (S.waste.length){
+      toast('No more trips through the deck.');
+    }
+  }
+
+  function bestTarget(loc){
+    const cards = pile(loc).slice(loc.k);
+    if (cards.length === 1 && loc.t !== 'found'){
+      for (let f = 0; f < 4; f++) if (fitsFound(cards[0], f)) return {t:'found', i:f};
+    }
+    const order = [];
+    for (let i = 0; i < 7; i++) if (S.tab[i].length) order.push(i);
+    for (let i = 0; i < 7; i++) if (!S.tab[i].length) order.push(i);
+    for (const i of order){
+      if (loc.t === 'tab' && loc.i === i) continue;
+      if (!S.tab[i].length && loc.t === 'tab' && loc.k === 0) continue; // king already alone at bottom
+      if (fitsTab(cards[0], i)) return {t:'tab', i};
+    }
+    return null;
+  }
+
+  function clickCard(loc, el){
+    const t = bestTarget(loc);
+    if (t) doMove(loc, t);
+    else shake(el);
+  }
+
+  function shake(el){
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+    setTimeout(() => el.classList.remove('shake'), 400);
+  }
+
+  function undo(){
+    if (busy || !undoStack.length) return;
+    S = JSON.parse(undoStack.pop());
+    render();
+  }
+
+  function maybeAutoFinish(){
+    if (S.stock.length || S.waste.length) return;
+    if (!S.tab.every(col => col.every(c => c.up))) return;
+    busy = true;
+    const step = () => {
+      for (let i = 0; i < 7; i++){
+        const col = S.tab[i]; if (!col.length) continue;
+        const c = col[col.length - 1];
+        for (let f = 0; f < 4; f++) if (fitsFound(c, f)){
+          S.found[f].push(col.pop()); S.moves++; render();
+          if (won()) { setTimeout(showWin, 450); return; }
+          setTimeout(step, 140); return;
+        }
+      }
+      busy = false;
+    };
+    setTimeout(step, 300);
+  }
+
+  function showWin(){
+    busy = false;
+    $('win-text').textContent = `Well done! You finished in ${S.moves} moves.`;
+    $('win').classList.add('show');
+  }
+
+  // ---------- Hints ----------
+  function findHint(){
+    const sources = [];
+    if (S.waste.length) sources.push({t:'waste', k:S.waste.length - 1});
+    S.tab.forEach((col, i) => { if (col.length) sources.push({t:'tab', i, k:col.length - 1}); });
+    for (const loc of sources){
+      const c = pile(loc)[loc.k];
+      for (let f = 0; f < 4; f++) if (fitsFound(c, f)) return c.id;
+    }
+    for (let i = 0; i < 7; i++){
+      const col = S.tab[i];
+      const k = col.findIndex(c => c.up);
+      if (k < 0) continue;
+      if (k === 0 && col[0].r === 13) continue;
+      for (let j = 0; j < 7; j++){
+        if (j === i) continue;
+        if (!S.tab[j].length && k === 0) continue;
+        if (fitsTab(col[k], j)) return col[k].id;
+      }
+    }
+    if (S.waste.length){
+      const c = S.waste[S.waste.length - 1];
+      for (let j = 0; j < 7; j++) if (fitsTab(c, j)) return c.id;
+    }
+    if (S.stock.length || (S.waste.length && canRecycle())) return 'stock';
+    return null;
+  }
+  function hint(){
+    if (busy) return;
+    const h = findHint();
+    if (h === null){ toast('No moves left. Try Undo, or start a New Game.'); return; }
+    const el = h === 'stock' ? (S.stock.length ? els[S.stock[S.stock.length-1].id] : $('slot-stock')) : els[h];
+    if (h === 'stock') toast('Turn over a card from the deck.');
+    el.classList.add('hint');
+    setTimeout(() => el.classList.remove('hint'), 1600);
+  }
+
+  let toastTimer;
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ---------- Pointer handling (tap or drag) ----------
+  table.addEventListener('pointerdown', e => {
+    if (busy || !S || drag) return;
+    const el = e.target.closest('.card');
+    if (!el){ if (e.target.closest('#slot-stock')) clickStock(); return; }
+    const loc = locate(+el.dataset.id);
+    if (!loc) return;
+    if (loc.t === 'stock'){ clickStock(); return; }
+    if (!movable(loc)) return;
+    const ids = pile(loc).slice(loc.k).map(c => c.id);
+    drag = {loc, el, ids, sx:e.clientX, sy:e.clientY, started:false,
+            start: ids.map(id => ({x:parseFloat(els[id].style.left), y:parseFloat(els[id].style.top)}))};
+    e.preventDefault();
+  });
+
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.started){
+      if (Math.hypot(dx, dy) < 8) return;
+      drag.started = true;
+      drag.ids.forEach((id, i) => { els[id].classList.add('drag'); clearTimeout(els[id]._zt); els[id].style.zIndex = 5000 + i; });
+    }
+    drag.ids.forEach((id, i) => {
+      els[id].style.left = (drag.start[i].x + dx) + 'px';
+      els[id].style.top  = (drag.start[i].y + dy) + 'px';
+    });
+  });
+
+  function overlap(a, b){
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return (w > 0 && h > 0) ? w * h : 0;
+  }
+  function findDrop(d){
+    const lead = els[d.ids[0]];
+    const r = {x:parseFloat(lead.style.left), y:parseFloat(lead.style.top), w:L.W, h:L.H};
+    const pos = computePositions();
+    let best = null, bestA = 0;
+    const consider = (target, rect) => {
+      const a = overlap(r, rect);
+      if (a > bestA && canDrop(d.loc, target)){ best = target; bestA = a; }
+    };
+    for (let f = 0; f < 4; f++) consider({t:'found', i:f}, {x:colX(3+f), y:L.top, w:L.W, h:L.H});
+    for (let i = 0; i < 7; i++){
+      const col = S.tab[i];
+      const y = col.length ? pos[col[col.length-1].id].y : L.tabY;
+      consider({t:'tab', i}, {x:colX(i), y:L.tabY, w:L.W, h:(y - L.tabY) + L.H});
+    }
+    return best;
+  }
+
+  window.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.started){
+      const target = findDrop(d);
+      if (target) doMove(d.loc, target); else render();
+    } else clickCard(d.loc, d.el);
+  });
+  window.addEventListener('pointercancel', () => { if (drag){ drag = null; render(); } });
+  table.addEventListener('contextmenu', e => e.preventDefault());
+
+  // ---------- Buttons ----------
+  function showStart(){
+    document.querySelectorAll('.levels .btn').forEach(b => b.classList.toggle('last', b.dataset.level === level));
+    $('win').classList.remove('show');
+    $('start').classList.add('show');
+  }
+  document.querySelectorAll('.levels .btn').forEach(b => b.addEventListener('click', () => newGame(b.dataset.level)));
+  $('btn-new').addEventListener('click', showStart);
+  $('btn-undo').addEventListener('click', undo);
+  $('btn-hint').addEventListener('click', hint);
+  $('btn-again').addEventListener('click', () => newGame(level));
+  $('btn-change').addEventListener('click', showStart);
+  window.addEventListener('resize', () => { if (S) render(true); });
+
+  // Deal a game in the background so the felt isn't empty, then ask for difficulty.
+  newGame(level);
+  showStart();
+})();
+</script>
+</body>
+</html>
